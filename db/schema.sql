@@ -1,5 +1,4 @@
--- CrisisCore Database Schema
--- Phase 1: Core tables, allocation logic, Banker's Algorithm, scheduling, logging
+
 
 CREATE DATABASE IF NOT EXISTS crisiscore;
 USE crisiscore;

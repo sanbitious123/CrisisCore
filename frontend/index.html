@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>CrisisCore Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f4f6fa; }
+    h1 { color: #14376a; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+    th { background: #14376a; color: white; }
+    button { background: #14376a; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; margin-top: 5px; }
+    button:hover { background: #0d2a52; }
+    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    #result { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h1>CrisisCore — Live Dashboard</h1>
+
+  <div class="card">
+    <h2>Task Queue (Priority Order)</h2>
+    <button onclick="loadQueue()">Refresh Queue</button>
+    <table id="queueTable">
+      <thead>
+        <tr><th>Task ID</th><th>Type</th><th>Priority</th><th>State</th></tr>
+      </thead>
+      <tbody id="queueBody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Allocate a Resource</h2>
+    Task ID: <input type="number" id="allocTaskId" value="1">
+    Resource ID: <input type="number" id="allocResourceId" value="1">
+    <button onclick="allocate()">Allocate</button>
+    <div id="allocResult"></div>
+  </div>
+
+  <div class="card">
+    <h2>Banker's Algorithm Safety Check</h2>
+    Task ID: <input type="number" id="bankerTaskId" value="1">
+    Resource Type: <input type="text" id="bankerType" value="ambulance">
+    <button onclick="bankerCheck()">Check Safety</button>
+    <div id="bankerResult"></div>
+  </div>
+
+  <script>
+    const API = "http://127.0.0.1:8000";
+
+    async function loadQueue() {
+      const res = await fetch(`${API}/tasks/queue`);
+      const data = await res.json();
+      const body = document.getElementById("queueBody");
+      body.innerHTML = "";
+      data.forEach(task => {
+        body.innerHTML += `<tr>
+          <td>${task.task_id}</td>
+          <td>${task.task_type}</td>
+          <td>${task.priority}</td>
+          <td>${task.state}</td>
+        </tr>`;
+      });
+    }
+
+    async function allocate() {
+      const taskId = document.getElementById("allocTaskId").value;
+      const resourceId = document.getElementById("allocResourceId").value;
+      const res = await fetch(`${API}/allocate?task_id=${taskId}&resource_id=${resourceId}`, { method: "POST" });
+      const data = await res.json();
+      document.getElementById("allocResult").innerText = data.result;
+      loadQueue();
+    }
+
+    async function bankerCheck() {
+      const taskId = document.getElementById("bankerTaskId").value;
+      const type = document.getElementById("bankerType").value;
+      const res = await fetch(`${API}/banker-check?task_id=${taskId}&resource_type=${type}`);
+      const data = await res.json();
+      document.getElementById("bankerResult").innerText =
+        `Safe: ${data.safe} (Task ${data.task_id}, ${data.resource_type})`;
+    }
+
+    loadQueue();
+  </script>
+
+</body>
+</html>
