@@ -1,88 +1,798 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>CrisisCore Dashboard</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; background: #f4f6fa; }
-    h1 { color: #14376a; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; background: white; }
-    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-    th { background: #14376a; color: white; }
-    button { background: #14376a; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; margin-top: 5px; }
-    button:hover { background: #0d2a52; }
-    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
-    #result { margin-top: 10px; font-weight: bold; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRISISCORE — Intelligent Resource Coordination</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0b1220; --panel:#111a2b; --panel-2:#0e1624; --border:#1e2a41; --border-2:#2a3a58;
+    --text:#e6ecf5; --dim:#8696b3; --faint:#5c6b88;
+    --cyan:#38a9d9; --cyan-soft:rgba(56,169,217,.12);
+    --green:#3fb97d; --amber:#e0a030; --red:#e5484d; --blue:#4c8dff;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); font-size:14px; }
+  svg.i { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0; }
+
+  /* ---------- Shell ---------- */
+  .shell { display:grid; grid-template-columns:224px 1fr; height:100vh; }
+  .sidebar { background:var(--panel-2); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:18px 12px; }
+  .wordmark { padding:2px 10px 18px; border-bottom:1px solid var(--border); margin-bottom:14px; }
+  .wordmark .name { font-weight:800; font-size:17px; letter-spacing:2.2px; }
+  .wordmark .name span { color:var(--cyan); }
+  .wordmark .sub { font-size:10.5px; color:var(--dim); letter-spacing:.4px; margin-top:3px; }
+  .nav { display:flex; flex-direction:column; gap:2px; flex:1; }
+  .nav a {
+    display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:7px; color:var(--dim);
+    text-decoration:none; font-weight:500; font-size:13px; cursor:pointer; position:relative;
+  }
+  .nav a:hover { background:rgba(255,255,255,.03); color:var(--text); }
+  .nav a.active { background:var(--cyan-soft); color:var(--text); }
+  .nav a.active::before { content:""; position:absolute; left:-12px; top:8px; bottom:8px; width:3px; background:var(--cyan); border-radius:0 3px 3px 0; }
+  .nav .bottom { margin-top:auto; border-top:1px solid var(--border); padding-top:10px; }
+
+  .main { display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:14px 28px; border-bottom:1px solid var(--border); background:var(--panel-2); }
+  .topbar h1 { font-size:16px; margin:0; font-weight:700; }
+  .topbar .crumb { font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .top-right { display:flex; align-items:center; gap:16px; }
+  .sys-status { display:flex; flex-direction:column; align-items:flex-end; }
+  .sys-status .lbl { font-size:9.5px; letter-spacing:1px; color:var(--faint); font-weight:600; }
+  .sys-status .val { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600; }
+  .sdot { width:7px; height:7px; border-radius:50%; background:var(--green); }
+  .sdot.warn { background:var(--amber); } .sdot.bad { background:var(--red); }
+  .icon-btn { background:none; border:1px solid var(--border); color:var(--dim); width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; }
+  .icon-btn:hover { color:var(--text); border-color:var(--border-2); }
+  .badge-dot { position:absolute; top:6px; right:7px; width:7px; height:7px; border-radius:50%; background:var(--red); display:none; }
+  .avatar { width:34px; height:34px; border-radius:50%; background:var(--panel); border:1px solid var(--border-2); display:flex; align-items:center; justify-content:center; color:var(--dim); }
+
+  .content { flex:1; overflow-y:auto; padding:24px 28px 50px; }
+  .page { display:none; animation:fade .25s ease; }
+  .page.active { display:block; }
+  @keyframes fade { from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none} }
+
+  /* ---------- Components ---------- */
+  .btn { display:inline-flex; align-items:center; gap:7px; font-family:inherit; font-weight:600; font-size:12.5px; padding:8px 14px; border-radius:7px; border:1px solid var(--border-2); background:var(--panel); color:var(--text); cursor:pointer; }
+  .btn:hover { border-color:var(--cyan); }
+  .btn.primary { background:var(--cyan); border-color:var(--cyan); color:#04121c; }
+  .btn.primary:hover { filter:brightness(1.08); }
+  .btn.danger { background:rgba(229,72,77,.12); border-color:rgba(229,72,77,.5); color:#ff8f93; }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+
+  .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+  .grid2 { display:grid; grid-template-columns:1.5fr 1fr; gap:18px; }
+  .grid2e { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:1100px){ .grid4{grid-template-columns:repeat(2,1fr)} .grid2,.grid2e{grid-template-columns:1fr} }
+
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .card-head h2 { font-size:11.5px; letter-spacing:1px; text-transform:uppercase; margin:0; color:var(--dim); font-weight:700; }
+  .metric .lbl { font-size:10.5px; letter-spacing:1px; color:var(--dim); font-weight:600; text-transform:uppercase; }
+  .metric .num { font-size:30px; font-weight:700; margin:6px 0 2px; font-variant-numeric:tabular-nums; }
+  .metric .note { font-size:12px; color:var(--dim); }
+  .metric.alert .num { color:var(--red); }
+  .metric .bar { height:4px; background:var(--border); border-radius:3px; margin-top:10px; overflow:hidden; }
+  .metric .bar > div { height:100%; background:var(--cyan); transition:width .5s ease; }
+
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--faint); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border); }
+  td { padding:11px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+  tr.row:hover td { background:rgba(255,255,255,.02); cursor:pointer; }
+  td.mono, .mono { font-family:var(--mono); font-size:12px; }
+  .empty { color:var(--dim); padding:18px 4px; font-size:13px; }
+
+  .tag { display:inline-block; padding:2px 9px; border-radius:5px; font-size:11px; font-weight:600; border:1px solid transparent; }
+  .p-critical { background:rgba(229,72,77,.12); color:#ff8f93; border-color:rgba(229,72,77,.35); }
+  .p-high { background:rgba(224,160,48,.12); color:#f0bb62; border-color:rgba(224,160,48,.35); }
+  .p-medium { background:rgba(76,141,255,.12); color:#8db5ff; border-color:rgba(76,141,255,.35); }
+  .p-low { background:rgba(134,150,179,.12); color:var(--dim); border-color:var(--border-2); }
+  .s-ok { background:rgba(63,185,125,.12); color:#6fd6a2; border-color:rgba(63,185,125,.35); }
+  .s-warn { background:rgba(224,160,48,.12); color:#f0bb62; border-color:rgba(224,160,48,.35); }
+  .s-bad { background:rgba(229,72,77,.12); color:#ff8f93; border-color:rgba(229,72,77,.35); }
+  .s-info { background:rgba(76,141,255,.12); color:#8db5ff; border-color:rgba(76,141,255,.35); }
+
+  /* pipeline / timeline */
+  .pipe { display:flex; flex-direction:column; }
+  .stage { display:flex; gap:12px; padding:9px 0; position:relative; }
+  .stage:not(:last-child)::after { content:""; position:absolute; left:10px; top:32px; bottom:-4px; width:1px; background:var(--border-2); }
+  .stage .node { width:21px; height:21px; border-radius:50%; border:1.5px solid var(--border-2); display:flex; align-items:center; justify-content:center; color:var(--faint); background:var(--panel); z-index:1; transition:all .3s ease; flex-shrink:0; }
+  .stage .node svg { width:11px; height:11px; stroke-width:2.6; display:none; }
+  .stage .t { font-weight:600; font-size:13px; color:var(--dim); transition:color .3s; }
+  .stage .d { font-size:11.5px; color:var(--faint); margin-top:1px; }
+  .stage.processing .node { border-color:var(--blue); color:var(--blue); }
+  .stage.processing .node::after { content:""; width:7px; height:7px; border-radius:50%; background:var(--blue); animation:pulse 1s infinite; }
+  .stage.processing .t { color:var(--text); }
+  .stage.done .node { border-color:var(--green); background:var(--green); color:#04140b; }
+  .stage.done .node svg { display:block; }
+  .stage.done .t { color:var(--text); }
+  .stage.failed .node { border-color:var(--red); background:var(--red); color:#fff; }
+  .stage.failed .node svg.x { display:block; }
+  .stage.failed .node svg.ck { display:none; }
+  .stage.failed .t { color:#ff8f93; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .banner { padding:12px 16px; border-radius:8px; font-size:13px; font-weight:600; margin-top:14px; border:1px solid; }
+  .banner.ok { background:rgba(63,185,125,.1); border-color:rgba(63,185,125,.4); color:#6fd6a2; }
+  .banner.bad { background:rgba(229,72,77,.1); border-color:rgba(229,72,77,.4); color:#ff8f93; }
+  .banner.info { background:rgba(76,141,255,.1); border-color:rgba(76,141,255,.4); color:#8db5ff; }
+  .note-demo { font-size:11px; color:var(--faint); margin-top:12px; line-height:1.5; }
+
+  .kv { display:grid; grid-template-columns:130px 1fr; gap:8px 12px; font-size:13px; }
+  .kv .k { color:var(--dim); }
+
+  /* scheduler */
+  .bands { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  @media (max-width:1100px){ .bands{grid-template-columns:repeat(2,1fr)} }
+  .band { background:var(--panel-2); border:1px solid var(--border); border-radius:9px; padding:12px; min-height:140px; }
+  .band h3 { margin:0 0 10px; font-size:11px; letter-spacing:1px; text-transform:uppercase; display:flex; justify-content:space-between; }
+  .chip { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--border); border-radius:6px; margin-bottom:6px; font-size:12px; background:var(--panel); cursor:pointer; }
+  .chip:hover { border-color:var(--cyan); }
+  .order { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .order .o { display:flex; align-items:center; gap:7px; padding:7px 11px; border:1px solid var(--border-2); border-radius:6px; background:var(--panel-2); font-size:12px; }
+  .order .n { color:var(--cyan); font-family:var(--mono); font-weight:500; }
+  .order .arrow { color:var(--faint); }
+
+  /* resources */
+  .res-groups { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+  .res-units { display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+  .unit { display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12.5px; background:var(--panel-2); }
+  .unit:hover { border-color:var(--cyan); }
+
+  /* deadlock */
+  .graph-box { background:var(--panel-2); border:1px solid var(--border); border-radius:9px; min-height:330px; display:flex; align-items:center; justify-content:center; }
+  .graph-box svg { width:100%; height:330px; }
+  table.matrix td, table.matrix th { text-align:center; font-family:var(--mono); }
+  table.matrix td:first-child, table.matrix th:first-child { text-align:left; }
+
+  /* logs */
+  .log { border:1px solid var(--border); border-radius:8px; margin-bottom:8px; background:var(--panel-2); }
+  .log-h { display:flex; align-items:center; gap:12px; padding:11px 14px; cursor:pointer; }
+  .log-h .tm { font-family:var(--mono); font-size:11.5px; color:var(--dim); margin-left:auto; }
+  .log-b { display:none; padding:4px 14px 14px 14px; font-family:var(--mono); font-size:12px; color:var(--dim); line-height:1.8; border-top:1px solid var(--border); }
+  .log.open .log-b { display:block; }
+
+  /* drawer + modal */
+  .scrim { position:fixed; inset:0; background:rgba(3,7,14,.6); display:none; z-index:50; }
+  .scrim.open { display:block; }
+  .drawer { position:fixed; top:0; right:-520px; width:500px; max-width:100%; height:100%; background:var(--panel); border-left:1px solid var(--border-2); z-index:60; transition:right .28s ease; overflow-y:auto; padding:22px 24px 40px; }
+  .drawer.open { right:0; }
+  .drawer h2 { margin:0; font-size:16px; }
+  .drawer .sub { color:var(--dim); font-size:12px; margin:3px 0 18px; }
+  .close { float:right; }
+  .modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-48%); opacity:0; pointer-events:none; width:440px; max-width:94%; background:var(--panel); border:1px solid var(--border-2); border-radius:12px; padding:22px 24px; z-index:70; transition:all .2s ease; }
+  .modal.open { opacity:1; transform:translate(-50%,-50%); pointer-events:auto; }
+  .modal h2 { margin:0 0 16px; font-size:16px; }
+  .field { margin-bottom:13px; }
+  .field label { display:block; font-size:11px; color:var(--dim); font-weight:600; margin-bottom:5px; letter-spacing:.3px; }
+  .field select, .field input { width:100%; background:var(--panel-2); border:1px solid var(--border-2); color:var(--text); padding:9px 11px; border-radius:7px; font-family:inherit; font-size:13px; outline:none; }
+  .field select:focus, .field input:focus { border-color:var(--cyan); }
+  .row-end { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+
+  #map { height:430px; border-radius:9px; border:1px solid var(--border); background:#0a101c; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:var(--panel); color:var(--text); }
+  .leaflet-container a.leaflet-popup-close-button { color:var(--dim); }
+</style>
 </head>
 <body>
+<div class="shell">
 
-  <h1>CrisisCore — Live Dashboard</h1>
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar">
+    <div class="wordmark">
+      <div class="name">CRISIS<span>CORE</span></div>
+      <div class="sub">Intelligent Resource Coordination</div>
+    </div>
+    <nav class="nav" id="nav">
+      <a data-page="overview" class="active"><svg class="i" data-icon="overview"></svg>Overview</a>
+      <a data-page="live"><svg class="i" data-icon="pin"></svg>Live Operations</a>
+      <a data-page="requests"><svg class="i" data-icon="list"></svg>Requests</a>
+      <a data-page="scheduler"><svg class="i" data-icon="layers"></svg>Scheduler</a>
+      <a data-page="resources"><svg class="i" data-icon="server"></svg>Resources</a>
+      <a data-page="deadlock"><svg class="i" data-icon="branch"></svg>Deadlock Monitor</a>
+      <a data-page="recovery"><svg class="i" data-icon="refresh"></svg>Recovery</a>
+      <a data-page="logs"><svg class="i" data-icon="db"></svg>Transaction Logs</a>
+      <div class="bottom">
+        <a data-page="settings"><svg class="i" data-icon="settings"></svg>Settings</a>
+      </div>
+    </nav>
+  </aside>
 
-  <div class="card">
-    <h2>Task Queue (Priority Order)</h2>
-    <button onclick="loadQueue()">Refresh Queue</button>
-    <table id="queueTable">
-      <thead>
-        <tr><th>Task ID</th><th>Type</th><th>Priority</th><th>State</th></tr>
-      </thead>
-      <tbody id="queueBody"></tbody>
-    </table>
+  <!-- ================= MAIN ================= -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="pageTitle">Overview</h1>
+        <div class="crumb" id="pageCrumb">System-wide view of tasks, resources and deadlock state</div>
+      </div>
+      <div class="top-right">
+        <button class="btn primary" onclick="openNewRequest()"><svg class="i" data-icon="plus"></svg>New Request</button>
+        <div class="sys-status">
+          <div class="lbl">SYSTEM STATUS</div>
+          <div class="val"><span class="sdot" id="sdot"></span><span id="stext">Connecting</span></div>
+        </div>
+        <button class="icon-btn" onclick="go('deadlock')" title="Alerts"><svg class="i" data-icon="bell"></svg><span class="badge-dot" id="bell"></span></button>
+        <div class="avatar"><svg class="i" data-icon="user"></svg></div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============ OVERVIEW ============ -->
+      <section class="page active" id="page-overview">
+        <div class="grid4">
+          <div class="card metric"><div class="lbl">Active Tasks</div><div class="num" id="mActive">-</div><div class="note" id="mActiveNote">&nbsp;</div></div>
+          <div class="card metric"><div class="lbl">Resource Utilization</div><div class="num" id="mUtil">-</div><div class="note" id="mUtilNote">&nbsp;</div><div class="bar"><div id="mUtilBar" style="width:0"></div></div></div>
+          <div class="card metric"><div class="lbl">Pending Requests</div><div class="num" id="mPending">-</div><div class="note" id="mPendingNote">&nbsp;</div></div>
+          <div class="card metric" id="mDeadCard"><div class="lbl">Active Deadlocks</div><div class="num" id="mDead">-</div><div class="note" id="mDeadNote">&nbsp;</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Live Resource Requests</h2><button class="btn" onclick="go('requests')">View all</button></div>
+          <table>
+            <thead><tr><th>Task ID</th><th>Priority</th><th>Requested Resource</th><th>Status</th><th>Assigned Unit</th><th></th></tr></thead>
+            <tbody id="ovReqBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ LIVE OPERATIONS ============ -->
+      <section class="page" id="page-live">
+        <div class="grid4" style="grid-template-columns:repeat(3,1fr)">
+          <div class="card metric"><div class="lbl">Units Deployed</div><div class="num" id="lUnits">-</div><div class="note">Resources currently allocated</div></div>
+          <div class="card metric"><div class="lbl">Pending Requests</div><div class="num" id="lPending">-</div><div class="note">Awaiting allocation</div></div>
+          <div class="card metric"><div class="lbl">Critical Requests</div><div class="num" id="lCrit">-</div><div class="note">Priority 9 and above</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Incident Map — Uttarakhand</h2><span class="tag s-info">Locations from reported incidents</span></div>
+          <div id="map"></div>
+        </div>
+      </section>
+
+      <!-- ============ REQUESTS ============ -->
+      <section class="page" id="page-requests">
+        <div class="card">
+          <div class="card-head"><h2>All Resource Requests</h2><button class="btn primary" onclick="openNewRequest()"><svg class="i" data-icon="plus"></svg>New Request</button></div>
+          <table>
+            <thead><tr><th>Task ID</th><th>Incident</th><th>Location</th><th>Priority</th><th>Requested Resource</th><th>Status</th><th>Assigned Unit</th></tr></thead>
+            <tbody id="reqBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============ SCHEDULER ============ -->
+      <section class="page" id="page-scheduler">
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-head"><h2>Priority Queue</h2><span class="tag s-info">Priority Scheduling</span></div>
+          <div class="bands" id="bands"></div>
+        </div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-head"><h2>Dispatch Order</h2><span class="note-demo" style="margin:0">Sorted by priority (highest first), then arrival time (earliest first)</span></div>
+          <div class="order" id="orderRow"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>In Execution</h2></div>
+          <table><thead><tr><th>Task ID</th><th>Incident</th><th>Priority</th><th>Assigned Unit</th></tr></thead><tbody id="execBody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- ============ RESOURCES ============ -->
+      <section class="page" id="page-resources">
+        <div class="res-groups" id="resGroups"></div>
+      </section>
+
+      <!-- ============ DEADLOCK ============ -->
+      <section class="page" id="page-deadlock">
+        <div class="grid2" style="margin-bottom:18px">
+          <div class="card">
+            <div class="card-head"><h2>Wait-for Graph</h2><button class="btn" onclick="refreshAll()"><svg class="i" data-icon="refresh"></svg>Re-scan</button></div>
+            <div class="graph-box" id="graphBox"></div>
+            <div class="note-demo">An edge A to B means task A is waiting for a resource currently held by task B. A directed cycle is a deadlock.</div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Deadlock Analysis</h2></div>
+            <div id="dlAnalysis"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Safety Analysis — Banker's Algorithm</h2>
+            <div style="display:flex; gap:10px; align-items:center">
+              <select id="bankerType" onchange="loadMatrix()" style="background:var(--panel-2);border:1px solid var(--border-2);color:var(--text);padding:7px 10px;border-radius:7px;font-family:inherit"></select>
+            </div>
+          </div>
+          <div id="bankerView"></div>
+        </div>
+      </section>
+
+      <!-- ============ RECOVERY ============ -->
+      <section class="page" id="page-recovery">
+        <div class="grid2e">
+          <div class="card">
+            <div class="card-head"><h2>Recovery Workflow</h2><button class="btn danger" id="recBtn" onclick="runRecovery()">Start Recovery</button></div>
+            <div class="pipe" id="recPipe"></div>
+            <div id="recBanner"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Recovery Details</h2></div>
+            <div id="recDetails"><div class="empty">No recovery has been run in this session.</div></div>
+            <div class="note-demo">Recovery preempts the lowest-priority task in the cycle: its allocation is released, the task returns to the queue, and the action is written to the transaction log.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LOGS ============ -->
+      <section class="page" id="page-logs">
+        <div class="card">
+          <div class="card-head"><h2>Transaction Log</h2><button class="btn" onclick="loadLogs()"><svg class="i" data-icon="refresh"></svg>Refresh</button></div>
+          <div id="logList"></div>
+        </div>
+      </section>
+
+      <!-- ============ SETTINGS ============ -->
+      <section class="page" id="page-settings">
+        <div class="card" style="max-width:560px">
+          <div class="card-head"><h2>Backend Connection</h2></div>
+          <div class="field"><label>FastAPI base URL</label><input id="apiInput" type="text"></div>
+          <button class="btn primary" onclick="saveApi()">Save</button>
+          <div class="note-demo">Data on every page is read live from the FastAPI backend and MySQL database through this URL.</div>
+        </div>
+      </section>
+
+    </div>
   </div>
+</div>
 
-  <div class="card">
-    <h2>Allocate a Resource</h2>
-    Task ID: <input type="number" id="allocTaskId" value="1">
-    Resource ID: <input type="number" id="allocResourceId" value="1">
-    <button onclick="allocate()">Allocate</button>
-    <div id="allocResult"></div>
-  </div>
+<!-- ================= DRAWER ================= -->
+<div class="scrim" id="scrim" onclick="closeAll()"></div>
+<aside class="drawer" id="drawer"></aside>
 
-  <div class="card">
-    <h2>Banker's Algorithm Safety Check</h2>
-    Task ID: <input type="number" id="bankerTaskId" value="1">
-    Resource Type: <input type="text" id="bankerType" value="ambulance">
-    <button onclick="bankerCheck()">Check Safety</button>
-    <div id="bankerResult"></div>
-  </div>
+<!-- ================= NEW REQUEST MODAL ================= -->
+<div class="modal" id="newModal">
+  <h2>New Resource Request</h2>
+  <div class="field"><label>LOCATION</label><select id="nLoc"></select></div>
+  <div class="field"><label>INCIDENT TYPE</label><select id="nType">
+    <option>Fire</option><option>Flood</option><option>Road Accident</option><option>Medical Emergency</option><option>Building Collapse</option>
+  </select></div>
+  <div class="field"><label>SEVERITY</label><select id="nSev">
+    <option value="critical">Critical</option><option value="high" selected>High</option><option value="medium">Medium</option><option value="low">Low</option>
+  </select></div>
+  <div class="field"><label>PEOPLE AFFECTED</label><input id="nVic" type="number" min="0" placeholder="0"></div>
+  <div class="row-end"><button class="btn" onclick="closeAll()">Cancel</button><button class="btn primary" onclick="submitRequest()">Request Resource</button></div>
+</div>
 
-  <script>
-    const API = "http://127.0.0.1:8000";
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG + ICONS
+============================================================ */
+let API = localStorage.getItem("cc_api") || "http://127.0.0.1:8000";
 
-    async function loadQueue() {
-      const res = await fetch(`${API}/tasks/queue`);
-      const data = await res.json();
-      const body = document.getElementById("queueBody");
-      body.innerHTML = "";
-      data.forEach(task => {
-        body.innerHTML += `<tr>
-          <td>${task.task_id}</td>
-          <td>${task.task_type}</td>
-          <td>${task.priority}</td>
-          <td>${task.state}</td>
-        </tr>`;
-      });
-    }
+const ICONS = {
+  overview:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+  pin:'<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0116 0z"/><circle cx="12" cy="10" r="3"/>',
+  list:'<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/>',
+  layers:'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  server:'<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/>',
+  branch:'<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/>',
+  refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0114.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0020.5 15"/>',
+  db:'<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  bell:'<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  user:'<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>',
+  alert:'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  chevron:'<polyline points="9 18 15 12 9 6"/>'
+};
+function icon(n){ return `<svg class="i" viewBox="0 0 24 24">${ICONS[n]}</svg>`; }
+document.querySelectorAll("svg.i[data-icon]").forEach(el => { el.setAttribute("viewBox","0 0 24 24"); el.innerHTML = ICONS[el.dataset.icon]; });
 
-    async function allocate() {
-      const taskId = document.getElementById("allocTaskId").value;
-      const resourceId = document.getElementById("allocResourceId").value;
-      const res = await fetch(`${API}/allocate?task_id=${taskId}&resource_id=${resourceId}`, { method: "POST" });
-      const data = await res.json();
-      document.getElementById("allocResult").innerText = data.result;
-      loadQueue();
-    }
+const CITIES = {
+  "Dehradun":[30.3165,78.0322],"Haridwar":[29.9457,78.1642],"Rishikesh":[30.0869,78.2676],"Nainital":[29.3919,79.4542],
+  "Haldwani":[29.2183,79.5130],"Rudrapur":[28.9875,79.4152],"Roorkee":[29.8543,77.8880],"Mussoorie":[30.4598,78.0664],
+  "Almora":[29.5892,79.6467],"Pithoragarh":[29.5829,80.2181],"Uttarkashi":[30.7268,78.4354],"Tehri":[30.3779,78.4804],
+  "Pauri":[30.1469,78.7805],"Chamoli":[30.4000,79.3200],"Bageshwar":[29.8406,79.7702],"Champawat":[29.3360,80.0919]
+};
+Object.keys(CITIES).forEach(c => { const o=document.createElement("option"); o.textContent=c; document.getElementById("nLoc").appendChild(o); });
 
-    async function bankerCheck() {
-      const taskId = document.getElementById("bankerTaskId").value;
-      const type = document.getElementById("bankerType").value;
-      const res = await fetch(`${API}/banker-check?task_id=${taskId}&resource_type=${type}`);
-      const data = await res.json();
-      document.getElementById("bankerResult").innerText =
-        `Safe: ${data.safe} (Task ${data.task_id}, ${data.resource_type})`;
-    }
+/* ============================================================
+   HELPERS
+============================================================ */
+const S = { incidents:[], resources:[], edges:[], cycles:[], page:"overview", lastRecovery:null };
 
-    loadQueue();
-  </script>
+function needFor(type){
+  const t=(type||"").toLowerCase();
+  if (t.includes("rescue")||t.includes("fire")||t.includes("flood")||t.includes("collapse")) return "rescue_team";
+  return "ambulance";
+}
+function pretty(rt){ return rt==="rescue_team" ? "Rescue Team" : rt==="ambulance" ? "Ambulance" : rt; }
+function band(p){ return p>=9?"critical":p>=7?"high":p>=4?"medium":"low"; }
+function bandLabel(p){ const b=band(p); return b[0].toUpperCase()+b.slice(1); }
+function pTag(p){ return `<span class="tag p-${band(p)}">${bandLabel(p)}</span>`; }
+function statusOf(i){
+  if (i.state==="running") return `<span class="tag s-ok">Assigned</span>`;
+  if (i.state==="completed") return `<span class="tag s-ok">Completed</span>`;
+  return `<span class="tag s-warn">Pending</span>`;
+}
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function api(path, opts){ const r = await fetch(API+path, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
 
+/* ============================================================
+   NAVIGATION
+============================================================ */
+const TITLES = {
+  overview:["Overview","System-wide view of tasks, resources and deadlock state"],
+  live:["Live Operations","Reported incidents plotted by location"],
+  requests:["Requests","Every resource request and its allocation status"],
+  scheduler:["Scheduler","Priority scheduling of incoming tasks"],
+  resources:["Resources","Inventory, utilization and lock status"],
+  deadlock:["Deadlock Monitor","Wait-for graph analysis and Banker's Algorithm safety check"],
+  recovery:["Recovery","Deadlock resolution by victim preemption"],
+  logs:["Transaction Logs","Database transaction and recovery history"],
+  settings:["Settings","Backend connection"]
+};
+function go(p){
+  S.page=p;
+  document.querySelectorAll(".page").forEach(e=>e.classList.toggle("active", e.id==="page-"+p));
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active", a.dataset.page===p));
+  document.getElementById("pageTitle").textContent = TITLES[p][0];
+  document.getElementById("pageCrumb").textContent = TITLES[p][1];
+  if (p==="live") initMap();
+  if (p==="logs") loadLogs();
+  if (p==="deadlock") loadMatrix();
+  if (p==="recovery") renderRecovery();
+  if (p==="settings") document.getElementById("apiInput").value = API;
+  renderAll();
+}
+document.querySelectorAll("#nav a").forEach(a => a.addEventListener("click", () => go(a.dataset.page)));
+function saveApi(){ API = document.getElementById("apiInput").value.trim(); localStorage.setItem("cc_api", API); refreshAll(); }
+
+/* ============================================================
+   DATA
+============================================================ */
+function findCycles(edges){
+  const adj={}; edges.forEach(e=>{ (adj[e.from_task]=adj[e.from_task]||[]).push(e.to_task); });
+  const found=new Map();
+  function dfs(node,path){
+    if (path.includes(node)){ const c=path.slice(path.indexOf(node)); const key=[...c].sort((a,b)=>a-b).join("-"); if(!found.has(key)) found.set(key,c); return; }
+    (adj[node]||[]).forEach(n=>dfs(n,[...path,node]));
+  }
+  Object.keys(adj).forEach(n=>dfs(Number(n),[]));
+  return [...found.values()];
+}
+
+async function refreshAll(){
+  try {
+    const [inc,res,edges] = await Promise.all([api("/incidents"), api("/resources"), api("/deadlock/graph")]);
+    S.incidents=inc; S.resources=res; S.edges=edges; S.cycles=findCycles(edges);
+    setStatus(S.cycles.length ? "bad":"ok", S.cycles.length ? "Deadlock detected":"Operational");
+  } catch(e){
+    setStatus("warn","Backend unreachable");
+  }
+  renderAll();
+}
+function setStatus(kind,text){
+  const d=document.getElementById("sdot"); d.className="sdot"+(kind==="ok"?"":kind==="warn"?" warn":" bad");
+  document.getElementById("stext").textContent=text;
+  document.getElementById("bell").style.display = S.cycles.length ? "block":"none";
+}
+
+/* ============================================================
+   RENDER
+============================================================ */
+function reqRow(i, withDetail){
+  const rt=needFor(i.task_type);
+  return `<tr class="row" onclick="openRequest(${i.task_id})">
+    <td class="mono">T-${i.task_id}</td>
+    ${withDetail?`<td>${esc(i.task_type)}</td><td>${esc(i.location)}</td>`:""}
+    <td>${pTag(i.priority)}</td>
+    <td>${pretty(rt)}</td>
+    <td>${statusOf(i)}</td>
+    <td class="mono">${esc(i.assigned_unit||"—")}</td>
+    ${withDetail?"":`<td style="text-align:right;color:var(--dim)">${icon("chevron")}</td>`}
+  </tr>`;
+}
+
+function renderAll(){
+  const inc=S.incidents.filter(i=>i.task_id);
+  const pend=inc.filter(i=>i.state==="new"||i.state==="ready");
+  const run=inc.filter(i=>i.state==="running");
+  const alloc=S.resources.filter(r=>r.status==="allocated").length;
+  const total=S.resources.length;
+
+  // overview metrics
+  document.getElementById("mActive").textContent = inc.filter(i=>i.state!=="completed").length;
+  document.getElementById("mActiveNote").textContent = `${run.length} in execution, ${pend.length} queued`;
+  document.getElementById("mUtil").textContent = total ? `${alloc} / ${total}` : "-";
+  const pct = total? Math.round(alloc/total*100):0;
+  document.getElementById("mUtilNote").textContent = `${pct}% utilized`;
+  document.getElementById("mUtilBar").style.width = pct+"%";
+  document.getElementById("mPending").textContent = pend.length;
+  document.getElementById("mPendingNote").textContent = `${pend.filter(i=>i.priority>=9).length} critical`;
+  document.getElementById("mDead").textContent = S.cycles.length;
+  document.getElementById("mDeadNote").textContent = S.cycles.length ? "Requires attention" : "No cycles in wait-for graph";
+  document.getElementById("mDeadCard").classList.toggle("alert", S.cycles.length>0);
+
+  const none = (cols,msg)=>`<tr><td colspan="${cols}" class="empty">${msg}</td></tr>`;
+  document.getElementById("ovReqBody").innerHTML = inc.length ? inc.slice(0,8).map(i=>reqRow(i,false)).join("") : none(6,"No requests yet.");
+  document.getElementById("reqBody").innerHTML = inc.length ? inc.map(i=>reqRow(i,true)).join("") : none(7,"No requests yet.");
+
+  // live ops metrics
+  document.getElementById("lUnits").textContent = alloc;
+  document.getElementById("lPending").textContent = pend.length;
+  document.getElementById("lCrit").textContent = pend.filter(i=>i.priority>=9).length;
+  if (S.page==="live") drawMarkers();
+
+  // scheduler
+  const bands={critical:[],high:[],medium:[],low:[]};
+  pend.forEach(i=>bands[band(i.priority)].push(i));
+  document.getElementById("bands").innerHTML = Object.entries(bands).map(([b,arr])=>`
+    <div class="band"><h3><span>${b}</span><span style="color:var(--faint)">${arr.length}</span></h3>
+    ${arr.length?arr.map(i=>`<div class="chip" onclick="openRequest(${i.task_id})"><span class="mono">T-${i.task_id}</span><span style="color:var(--dim)">${esc(i.task_type)}</span></div>`).join(""):`<div class="empty" style="padding:6px 2px">Empty</div>`}</div>`).join("");
+  const ordered=[...pend].sort((a,b)=>b.priority-a.priority || new Date(a.reported_at)-new Date(b.reported_at));
+  document.getElementById("orderRow").innerHTML = ordered.length ? ordered.map((i,k)=>`${k?`<span class="arrow">${icon("chevron")}</span>`:""}<div class="o"><span class="n">${k+1}</span><span class="mono">T-${i.task_id}</span>${pTag(i.priority)}</div>`).join("") : `<div class="empty">Queue is empty.</div>`;
+  document.getElementById("execBody").innerHTML = run.length ? run.map(i=>`<tr class="row" onclick="openRequest(${i.task_id})"><td class="mono">T-${i.task_id}</td><td>${esc(i.task_type)}</td><td>${pTag(i.priority)}</td><td class="mono">${esc(i.assigned_unit||"—")}</td></tr>`).join("") : none(4,"Nothing executing.");
+
+  // resources
+  const groups={}; S.resources.forEach(r=>(groups[r.resource_type]=groups[r.resource_type]||[]).push(r));
+  document.getElementById("resGroups").innerHTML = Object.keys(groups).length ? Object.entries(groups).map(([t,arr])=>{
+    const a=arr.filter(r=>r.status==="allocated").length, p=Math.round(a/arr.length*100);
+    return `<div class="card"><div class="card-head"><h2>${pretty(t)}s</h2><span class="mono" style="color:var(--dim)">${arr.length-a} / ${arr.length} available</span></div>
+      <div class="metric"><div class="note">Allocated ${a} of ${arr.length} — ${p}% utilization</div><div class="bar"><div style="width:${p}%"></div></div></div>
+      <div class="res-units">${arr.map(r=>`<div class="unit" onclick="openResource(${r.resource_id})"><span>${esc(r.name)}</span><span class="tag ${r.status==="available"?"s-ok":"s-warn"}">${r.status==="available"?"Available":"Allocated"}</span></div>`).join("")}</div></div>`;
+  }).join("") : `<div class="empty">No resources found.</div>`;
+
+  renderDeadlock();
+}
+
+/* ---------- Deadlock graph ---------- */
+function renderDeadlock(){
+  const box=document.getElementById("graphBox");
+  const an=document.getElementById("dlAnalysis");
+  if (!S.edges.length){
+    box.innerHTML=`<div class="empty">No wait-for edges. No task is currently waiting on another task's resource.</div>`;
+    an.innerHTML=`<div class="banner ok">No deadlock detected</div><div class="note-demo">The wait-for graph is empty, so no circular wait exists.</div>`;
+    return;
+  }
+  const nodes=[...new Set(S.edges.flatMap(e=>[e.from_task,e.to_task]))];
+  const W=560,H=330,cx=W/2,cy=H/2,R=Math.min(110,40+nodes.length*22);
+  const pos={}; nodes.forEach((n,i)=>{ const a=-Math.PI/2+i*2*Math.PI/nodes.length; pos[n]={x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)}; });
+  const cyc=new Set(); S.cycles.forEach(c=>c.forEach((n,i)=>cyc.add(n+">"+c[(i+1)%c.length])));
+  const inCyc=new Set(S.cycles.flat());
+  const r=22;
+  const edgesSvg=S.edges.map(e=>{
+    const a=pos[e.from_task], b=pos[e.to_task];
+    const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1, ux=dx/len, uy=dy/len;
+    const mx=(a.x+b.x)/2 - uy*34, my=(a.y+b.y)/2 + ux*34;
+    const sx=a.x+ux*r, sy=a.y+uy*r, ex=b.x-ux*(r+4), ey=b.y-uy*(r+4);
+    const hot=cyc.has(e.from_task+">"+e.to_task), col=hot?"#e5484d":"#4a5d82";
+    return `<path d="M${sx},${sy} Q${mx},${my} ${ex},${ey}" fill="none" stroke="${col}" stroke-width="${hot?2.2:1.5}" marker-end="url(#ar${hot?"h":"n"})"/>
+            <text x="${mx}" y="${my}" fill="#8696b3" font-size="10.5" font-family="JetBrains Mono" text-anchor="middle" dy="-4">R${e.resource_id}</text>`;
+  }).join("");
+  const nodesSvg=nodes.map(n=>`<circle cx="${pos[n].x}" cy="${pos[n].y}" r="${r}" fill="#0e1624" stroke="${inCyc.has(n)?"#e5484d":"#38a9d9"}" stroke-width="1.8"/>
+    <text x="${pos[n].x}" y="${pos[n].y+4}" fill="#e6ecf5" font-size="12" font-family="JetBrains Mono" text-anchor="middle">T-${n}</text>`).join("");
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}"><defs>
+    <marker id="arn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4a5d82"/></marker>
+    <marker id="arh" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e5484d"/></marker></defs>${edgesSvg}${nodesSvg}</svg>`;
+
+  if (S.cycles.length){
+    const c=S.cycles[0];
+    const resIds=[...new Set(S.edges.filter(e=>cyc.has(e.from_task+">"+e.to_task)).map(e=>"R"+e.resource_id))];
+    an.innerHTML=`<div class="banner bad">Deadlock detected — ${S.cycles.length} cycle${S.cycles.length>1?"s":""}</div>
+      <div class="kv" style="margin-top:14px">
+        <div class="k">Cycle</div><div class="mono">${c.map(n=>"T-"+n).join(" → ")} → T-${c[0]}</div>
+        <div class="k">Tasks involved</div><div class="mono">${c.map(n=>"T-"+n).join(", ")}</div>
+        <div class="k">Resources</div><div class="mono">${resIds.join(", ")}</div>
+        <div class="k">Detection method</div><div>Wait-for graph</div>
+        <div class="k">Scanned at</div><div class="mono">${new Date().toLocaleTimeString()}</div>
+        <div class="k">Severity</div><div><span class="tag s-bad">Critical</span></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px"><button class="btn" onclick="refreshAll()">Analyze</button><button class="btn danger" onclick="go('recovery')">Start Recovery</button></div>`;
+  } else {
+    an.innerHTML=`<div class="banner info">Tasks are waiting, but no cycle exists</div><div class="note-demo">Waiting alone is not deadlock. The wait-for graph has no circular dependency.</div>`;
+  }
+}
+
+/* ---------- Banker's matrix ---------- */
+function fillBankerTypes(){
+  const sel=document.getElementById("bankerType"); const cur=sel.value;
+  const types=[...new Set(S.resources.map(r=>r.resource_type))];
+  sel.innerHTML=types.map(t=>`<option value="${t}">${pretty(t)}</option>`).join("");
+  if (cur && types.includes(cur)) sel.value=cur;
+}
+async function loadMatrix(){
+  fillBankerTypes();
+  const t=document.getElementById("bankerType").value; const v=document.getElementById("bankerView");
+  if (!t){ v.innerHTML=`<div class="empty">No resource types available.</div>`; return; }
+  try{
+    const m=await api("/banker/matrix?resource_type="+encodeURIComponent(t));
+    if (!m.total || !m.rows.length){ v.innerHTML=`<div class="empty">No pool or max-claim data for ${pretty(t)}. Seed Resource_Type_Pool and Task_Max_Claim to analyze it.</div>`; return; }
+    // standard Banker's safety algorithm (single resource type)
+    let work=m.available; const fin={}; const seq=[];
+    let progress=true;
+    while(progress){ progress=false; for(const r of m.rows){ if(!fin[r.task_id] && r.need<=work){ work+=r.allocated; fin[r.task_id]=true; seq.push("T-"+r.task_id); progress=true; } } }
+    const safe=m.rows.every(r=>fin[r.task_id]);
+    v.innerHTML=`<div class="grid2e">
+      <div><table class="matrix"><thead><tr><th>Process</th><th>Max</th><th>Allocated</th><th>Need</th></tr></thead><tbody>
+        ${m.rows.map(r=>`<tr><td>T-${r.task_id}</td><td>${r.max_claim}</td><td>${r.allocated}</td><td>${r.need}</td></tr>`).join("")}
+      </tbody></table>
+      <div class="kv" style="margin-top:14px"><div class="k">Total instances</div><div class="mono">${m.total}</div><div class="k">Available</div><div class="mono">${m.available}</div></div></div>
+      <div><div class="card-head"><h2>System State</h2></div>
+        ${safe?`<div class="banner ok">SAFE STATE</div><div class="kv" style="margin-top:14px"><div class="k">Safe sequence</div><div class="mono">${seq.join(" → ")}</div></div>`
+              :`<div class="banner bad">UNSAFE STATE</div><div class="kv" style="margin-top:14px"><div class="k">Result</div><div>Allocation denied</div><div class="k">Reason</div><div>Granting further requests may lead to an unsafe state.</div></div>`}
+        <div class="note-demo">Matrix is read from Resource_Type_Pool, Task_Max_Claim and Resource_Allocation. The safe sequence is computed from that data with the standard Banker's safety algorithm.</div>
+      </div></div>`;
+  }catch(e){ v.innerHTML=`<div class="empty">Could not load matrix.</div>`; }
+}
+
+/* ---------- Recovery ---------- */
+const REC_STAGES=[["Deadlock detected","Cycle found in the wait-for graph"],["Cycle identified","Tasks and resources in the cycle determined"],["Victim selected","Lowest-priority task in the cycle chosen"],["Resources released","Victim's allocation closed, resource freed"],["Task requeued","Victim returned to the queue in New state"],["System recovered","Action committed and written to transaction log"]];
+function stageHtml(list,states){
+  return list.map(([t,d],i)=>`<div class="stage ${states[i]||""}"><div class="node"><svg class="i ck" viewBox="0 0 24 24">${ICONS.check}</svg><svg class="i x" viewBox="0 0 24 24" style="display:none">${ICONS.x}</svg></div><div><div class="t">${t}</div><div class="d">${d}</div></div></div>`).join("");
+}
+function renderRecovery(states){
+  states = states || (S.lastRecovery? REC_STAGES.map(()=>"done") : []);
+  document.getElementById("recPipe").innerHTML=stageHtml(REC_STAGES,states);
+  document.querySelectorAll("#recPipe .stage.failed .node svg.x").forEach(x=>x.style.display="block");
+  const b=document.getElementById("recBtn"); b.disabled = !S.cycles.length;
+  b.textContent = S.cycles.length ? "Start Recovery" : "No deadlock to recover";
+  const d=document.getElementById("recDetails");
+  if (S.lastRecovery){
+    const L=S.lastRecovery;
+    d.innerHTML=`<div class="kv"><div class="k">Procedure result</div><div>${esc(L.result)}</div><div class="k">Victim task</div><div class="mono">T-${L.victim}</div><div class="k">Log entry</div><div class="mono">${esc(L.details)}</div><div class="k">Logged at</div><div class="mono">${esc(L.time)}</div><div class="k">Status</div><div><span class="tag s-ok">System recovered</span></div></div>`;
+  }
+}
+async function runRecovery(){
+  if (!S.cycles.length) return;
+  const st=[]; const set=(i,v)=>{ st[i]=v; renderRecovery(st); };
+  document.getElementById("recBanner").innerHTML="";
+  document.getElementById("recBtn").disabled=true;
+  for (let i=0;i<4;i++){ set(i,"processing"); await sleep(450); if(i<3) set(i,"done"); }
+  try{
+    const out=await api("/deadlock/recover",{method:"POST"});
+    set(3,"done"); set(4,"processing"); await sleep(400); set(4,"done"); set(5,"processing"); await sleep(400); set(5,"done");
+    const logs=await api("/logs");
+    const rec=logs.find(l=>l.action_type==="DEADLOCK_RECOVERY")||{};
+    S.lastRecovery={result:out.result, victim:rec.record_id??"?", details:rec.details||"", time:rec.logged_at||""};
+    document.getElementById("recBanner").innerHTML=`<div class="banner ok">${esc(out.result)}</div>`;
+    renderRecovery(REC_STAGES.map(()=>"done"));
+  }catch(e){
+    set(3,"failed");
+    document.getElementById("recBanner").innerHTML=`<div class="banner bad">Recovery failed. The transaction was not committed.</div>`;
+  }
+  await refreshAll();
+}
+
+/* ---------- Logs ---------- */
+async function loadLogs(){
+  const el=document.getElementById("logList");
+  try{
+    const logs=await api("/logs");
+    if(!logs.length){ el.innerHTML=`<div class="empty">No log entries.</div>`; return; }
+    el.innerHTML=logs.map(l=>{
+      const bad=l.action_type.includes("DEADLOCK");
+      return `<div class="log" onclick="this.classList.toggle('open')">
+        <div class="log-h"><span class="mono" style="color:var(--faint)">#${l.log_id}</span><span class="tag ${bad?"s-bad":"s-ok"}">${esc(l.action_type)}</span><span>${esc(l.table_name)}</span><span class="tm">${esc(l.logged_at)}</span></div>
+        <div class="log-b">BEGIN<br>TABLE &nbsp;&nbsp;${esc(l.table_name)}<br>RECORD &nbsp;${esc(l.record_id)}<br>ACTION &nbsp;${esc(l.action_type)}<br>DETAIL &nbsp;${esc(l.details)}<br>COMMIT</div></div>`;
+    }).join("");
+  }catch(e){ el.innerHTML=`<div class="empty">Could not load logs.</div>`; }
+}
+
+/* ============================================================
+   DRAWERS + MODAL
+============================================================ */
+function closeAll(){ document.getElementById("drawer").classList.remove("open"); document.getElementById("newModal").classList.remove("open"); document.getElementById("scrim").classList.remove("open"); }
+function openDrawer(html){ const d=document.getElementById("drawer"); d.innerHTML=html; d.classList.add("open"); document.getElementById("scrim").classList.add("open"); }
+function openNewRequest(){ document.getElementById("newModal").classList.add("open"); document.getElementById("scrim").classList.add("open"); }
+
+const PIPE=[["Task created","Task row inserted for the incident"],["Priority assigned","Severity mapped to a priority value"],["Safety check","Banker's Algorithm verifies the state stays safe"],["Database transaction","Transaction started, unit selected"],["Resource lock","Resource row locked (SELECT ... FOR UPDATE)"],["Resource allocation","Allocation recorded, resource and task updated"],["Transaction commit","Committed and written to the transaction log"]];
+
+function openRequest(id){
+  const i=S.incidents.find(x=>x.task_id===id); if(!i) return;
+  const rt=needFor(i.task_type); const assigned=i.state==="running"||i.state==="completed";
+  openDrawer(`<button class="btn close" onclick="closeAll()">${icon("x")}</button>
+    <h2>Request T-${i.task_id}</h2><div class="sub">${esc(i.task_type)} — ${esc(i.location)}</div>
+    <div class="kv" style="margin-bottom:20px">
+      <div class="k">Incident</div><div>${esc(i.task_type)}</div>
+      <div class="k">Priority</div><div>${pTag(i.priority)} <span class="mono" style="color:var(--dim)">P${i.priority}</span></div>
+      <div class="k">Requested</div><div>${pretty(rt)}</div>
+      <div class="k">People affected</div><div>${i.victims_count}</div>
+      <div class="k">Status</div><div>${assigned?`Assigned to ${esc(i.assigned_unit||"unit")}`:"Awaiting allocation"}</div>
+    </div>
+    <div class="card-head"><h2>Processing Pipeline</h2></div>
+    <div class="pipe" id="pipeBox">${stageHtml(PIPE, assigned?PIPE.map(()=>"done"):["done","done"])}</div>
+    <div id="pipeOut"></div>
+    ${assigned?"":`<button class="btn primary" id="procBtn" style="margin-top:16px" onclick="processRequest(${i.task_id})">Process Request</button>`}
+    <div class="note-demo">Stages 4 to 7 run together inside the sp_allocate_resource stored procedure; the pipeline reflects that procedure's actual result.</div>`);
+}
+
+async function processRequest(id){
+  const i=S.incidents.find(x=>x.task_id===id); const rt=needFor(i.task_type);
+  const box=document.getElementById("pipeBox"), out=document.getElementById("pipeOut");
+  document.getElementById("procBtn").disabled=true;
+  const st=["done","done"]; const paint=()=>{ box.innerHTML=stageHtml(PIPE,st); box.querySelectorAll(".stage.failed .node svg.x").forEach(x=>x.style.display="block"); };
+  const fail=(idx,msg)=>{ st[idx]="failed"; paint(); out.innerHTML=`<div class="banner bad">${msg}</div>`; };
+  try{
+    st[2]="processing"; paint(); await sleep(500);
+    const b=await api(`/banker-check?task_id=${id}&resource_type=${rt}`);
+    if(!b.safe){ fail(2,"UNSAFE STATE — allocation denied. Granting this request may lead to an unsafe state."); return; }
+    st[2]="done"; st[3]="processing"; paint(); await sleep(450);
+    const res=await api("/resources"); const unit=res.find(r=>r.resource_type===rt && r.status==="available");
+    if(!unit){ fail(3,`No ${pretty(rt)} is currently available.`); return; }
+    st[3]="done"; st[4]="processing"; paint(); await sleep(450);
+    const a=await api(`/allocate?task_id=${id}&resource_id=${unit.resource_id}`,{method:"POST"});
+    if(!a.result.toLowerCase().includes("success")){ fail(4,esc(a.result)); return; }
+    st[4]="done"; st[5]="processing"; paint(); await sleep(400);
+    st[5]="done"; st[6]="processing"; paint(); await sleep(400);
+    st[6]="done"; paint();
+    out.innerHTML=`<div class="banner ok">ALLOCATION SUCCESSFUL — ${esc(unit.name)} assigned to T-${id}.</div>`;
+  }catch(e){ fail(st.indexOf("processing")>=0?st.indexOf("processing"):3,"Request failed. The transaction was rolled back."); }
+  refreshAll();
+}
+
+async function openResource(id){
+  try{
+    const d=await api(`/resources/${id}/detail`); const r=d.resource, a=d.latest_allocation;
+    const held=a && !a.released_at;
+    openDrawer(`<button class="btn close" onclick="closeAll()">${icon("x")}</button>
+      <h2>${esc(r.name)}</h2><div class="sub">${pretty(r.resource_type)} — Resource ${r.resource_id}</div>
+      <div class="kv">
+        <div class="k">Status</div><div><span class="tag ${r.status==="available"?"s-ok":"s-warn"}">${r.status==="available"?"Available":"Allocated"}</span></div>
+        <div class="k">Current task</div><div class="mono">${held?"T-"+a.task_id:"—"}</div>
+        <div class="k">Lock status</div><div>${held?`<span class="tag s-warn">Held</span>`:`<span class="tag s-ok">Free</span>`}</div>
+        <div class="k">Allocated at</div><div class="mono">${held?esc(a.acquired_at):"—"}</div>
+        <div class="k">Last allocation</div><div class="mono">${a?`#${a.allocation_id} (T-${a.task_id})`:"None"}</div>
+        <div class="k">Last released</div><div class="mono">${a&&a.released_at?esc(a.released_at):"—"}</div>
+      </div>
+      <div class="note-demo">Read from Resource and Resource_Allocation. A resource is held while its latest allocation has no release time.</div>`);
+  }catch(e){}
+}
+
+async function submitRequest(){
+  const loc=document.getElementById("nLoc").value, [lat,lng]=CITIES[loc];
+  const q=`location=${encodeURIComponent(loc)}&incident_type=${encodeURIComponent(document.getElementById("nType").value)}&severity=${document.getElementById("nSev").value}&victims=${document.getElementById("nVic").value||0}&latitude=${lat}&longitude=${lng}`;
+  try{ await api("/incidents/report?"+q,{method:"POST"}); }catch(e){}
+  document.getElementById("nVic").value=""; closeAll(); await refreshAll(); go("requests");
+}
+
+/* ============================================================
+   MAP
+============================================================ */
+let map=null, layer=null;
+function initMap(){
+  if(!map){
+    map=L.map("map").setView([30.0668,79.0193],8);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:15,attribution:"&copy; OpenStreetMap, &copy; CARTO"}).addTo(map);
+    layer=L.layerGroup().addTo(map);
+  }
+  setTimeout(()=>{ map.invalidateSize(); drawMarkers(); },60);
+}
+function drawMarkers(){
+  if(!map) return; layer.clearLayers();
+  S.incidents.forEach(i=>{
+    if(!i.latitude||!i.longitude) return;
+    const col = i.priority>=9?"#e5484d":i.priority>=7?"#e0a030":i.priority>=4?"#4c8dff":"#8696b3";
+    L.circleMarker([i.latitude,i.longitude],{radius:9,color:"#0b1220",weight:2,fillColor:col,fillOpacity:.95})
+      .bindPopup(`<b>T-${i.task_id} — ${esc(i.task_type)}</b><br>${esc(i.location)}<br>${bandLabel(i.priority)} priority · ${i.victims_count} affected<br>Status: ${i.state==="running"?"Assigned":"Pending"}`)
+      .addTo(layer);
+  });
+}
+
+/* ============================================================
+   START
+============================================================ */
+refreshAll();
+setInterval(refreshAll, 8000);
+</script>
 </body>
 </html>
