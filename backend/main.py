@@ -23,6 +23,10 @@ def get_connection():
     )
 
 
+import v2                      # v2: alerts, dispatch, complete, proof lab
+app.include_router(v2.router)
+
+
 # Which resource type each incident type needs
 NEEDS = {
     "fire": "rescue_team",
