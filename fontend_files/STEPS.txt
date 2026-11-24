@@ -1,0 +1,26 @@
+STEPS for Aarish (Windows PowerShell)
+
+1. Open PowerShell where you want the project and run:
+git clone https://github.com/sanbitious123/CrisisCore.git
+cd CrisisCore
+git pull origin main
+git checkout -b feature/aarish
+   (If you already have the repo cloned: cd into it, then run only the last 3 lines.)
+
+2. Copy the files from this zip into the repo, keeping the same folders:
+README.md docs/
+
+3. Commit and push:
+git status
+git add README.md docs/
+git commit -m "docs: readme, run book, screenshots folder"
+git push origin feature/aarish
+
+4. Open github.com/sanbitious123/CrisisCore -> click "Compare & pull request" -> "Create pull request".
+   Tell Saniya to merge it.
+
+Add your dashboard screenshots to docs/screenshots/ (git add docs/) before step 3 if you have them.
+If git asks who you are:
+git config --global user.name "Your Name"
+git config --global user.email "your-github-email"
+If push is rejected: git pull origin main --rebase, then push again.
